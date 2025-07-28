@@ -168,6 +168,59 @@ def get_reply(message,messages):
     
     return reply_content
 
+def show_recent_messages_for_selection(messages):
+    """显示最近5条消息供用户选择"""
+    import json
+    
+    # 解析最近5条消息
+    recent_messages = []
+    for raw_msg in messages[-5:]:
+        try:
+            content = json.loads(raw_msg)
+            text_content = content.get("text", "")
+            if text_content:
+                recent_messages.append(text_content)
+        except:
+            continue
+    
+    if not recent_messages:
+        return None
+    
+    print("\n" + "="*60)
+    print("📋 选择要回复的消息 (最近5条)")
+    print("="*60)
+    
+    for i, msg in enumerate(recent_messages, 1):
+        # 截断过长的消息
+        preview = msg[:60] + "..." if len(msg) > 60 else msg
+        print(f"{i}. {preview}")
+    
+    print("0. 自定义回复内容")
+    print("="*60)
+    
+    while True:
+        try:
+            choice = input("请输入选择 (0-{}): ".format(len(recent_messages))).strip()
+            
+            if choice == "0":
+                custom_msg = input("请输入自定义回复内容: ").strip()
+                if custom_msg:
+                    return custom_msg
+                else:
+                    print("内容不能为空，请重新选择")
+                    continue
+            
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(recent_messages):
+                selected_msg = recent_messages[choice_num - 1]
+                print(f"\n✅ 已选择: {selected_msg[:80]}...")
+                return selected_msg
+            else:
+                print(f"请输入0-{len(recent_messages)}之间的数字")
+                
+        except ValueError:
+            print("请输入有效数字")
+
 if __name__ == "__main__":
     print("🚀 飞书智能回复机器人启动中...")
     print("📱 正在获取飞书群组消息...")
@@ -176,11 +229,17 @@ if __name__ == "__main__":
     
     if messages:
         print(f"\n✅ 成功获取到 {len(messages)} 条有效消息")
-        print("🧠 开始生成智能回复...")
         
-        reply = get_reply("露嘉，就在 先找客户理清楚问题有哪些，安抚下吧，要约上业务、内控，It也是内部扛不住压力了，帮帮IT。刚刚，多点销售拉了个群，讲今天去谈商务续费，客户全程在吐槽智书，我拉你和销售对接，然后一起和销售处理好吧。", messages)
+        # 让用户选择要回复的消息
+        selected_content = show_recent_messages_for_selection(messages)
         
-        print(f"\n🎉 回复生成完成！总计 {len(reply)} 个字符")
-        print("✨ 请直接复制上面框内的回复内容发送到飞书群组")
+        if selected_content:
+            print("\n🧠 开始生成智能回复...")
+            reply = get_reply(selected_content, messages)
+            
+            print(f"\n🎉 回复生成完成！总计 {len(reply)} 个字符")
+            print("✨ 请直接复制上面框内的回复内容发送到飞书群组")
+        else:
+            print("❌ 未选择有效消息")
     else:
         print("❌ 未获取到有效消息，请检查群组ID和权限配置")
