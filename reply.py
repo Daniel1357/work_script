@@ -4,6 +4,7 @@ import os
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
+from lark_oapi.api.contact.v3 import *
 from openai import OpenAI
 
 NOW = int(datetime.now().timestamp())
@@ -16,6 +17,50 @@ GROUP_ID = "oc_16eefcc056bd0bafd898e0c69b171f76"
 # SDK 使用说明: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/server-side-sdk/python--sdk/preparations-before-development
 # 以下示例代码默认根据文档示例值填充，如果存在代码问题，请在 API 调试台填上相关必要参数后再复制代码使用
 # 复制该 Demo 后, 需要将 "YOUR_APP_ID", "YOUR_APP_SECRET" 替换为自己应用的 APP_ID, APP_SECRET.
+
+def get_user_name(user_id, user_id_type="open_id"):
+    # 创建client
+    client = lark.Client.builder() \
+        .app_id(APP_ID) \
+        .app_secret(APP_SECRET) \
+        .log_level(lark.LogLevel.DEBUG) \
+        .build()
+
+    # 构造请求对象
+    request: GetUserRequest = GetUserRequest.builder() \
+        .user_id(user_id) \
+        .user_id_type(user_id_type) \
+        .build()
+
+    # 发起请求
+    response: GetUserResponse = client.contact.v3.user.get(request)
+
+    # 处理失败返回
+    if not response.success():
+        lark.logger.error(
+            f"client.contact.v3.user.get failed, code: {response.code}, msg: {response.msg}, log_id: {response.get_log_id()}, resp: \n{json.dumps(json.loads(response.raw.content), indent=4, ensure_ascii=False)}")
+        return
+
+    # 处理业务结果
+    # lark.logger.info(lark.JSON.marshal(response.data, indent=4))
+
+    return response.data.user.name
+
+
+def get_message_content(content):
+    if "text" in content:
+        return content["text"]
+    
+    if "content" in content:
+        items = []
+        for contents in content["content"]:
+            for c in contents:
+                if "text" in c:
+                    items.append(c["text"])
+        return "\n".join(items)
+    
+    return ""
+
 def get_messages(group_id):
     # 创建client
     client = lark.Client.builder() \
@@ -31,6 +76,7 @@ def get_messages(group_id):
     
     print("🔄 开始分页获取所有历史消息...")
     
+    name_by_user_id = {}
     while page_count < max_pages:
         page_count += 1
         print(f"📄 正在获取第 {page_count} 页消息...")
@@ -65,16 +111,43 @@ def get_messages(group_id):
             for message in response.data.items:
                 try:
                     content = json.loads(message.body.content)
-                    if "text" not in content:
+
+                    if "text" not in content and "content" not in content:
                         continue
 
+                    name = None
+                    if message.sender.id not in name_by_user_id:
+                        name = get_user_name(message.sender.id)
+                    else:
+                        name = name_by_user_id[message.sender.id]
+
+                    if not name:
+                        continue
+                    
+                    if message.mentions:
+                        mentions = [m.name for m in message.mentions]
+                        print(mentions)
+                        name_by_user_id.update({
+                            m.id: m.name for m in message.mentions
+                        })
+                    
                     # 简化消息输出，只显示关键信息
-                    text_content = content.get("text", "")
+                    text_content = get_message_content(content) #content.get("text", "")
                     timestamp = datetime.fromtimestamp(int(message.create_time) / 1000)
                     
                     print(f"📝 {timestamp.strftime('%Y-%m-%d %H:%M')} - {text_content[:50]}{'...' if len(text_content) > 50 else ''}")
-                    page_messages.append(message.body.content)
-                    all_messages.append(message.body.content)
+                    
+                    original_content = json.loads(message.body.content)
+                    original_content["from_user"] = name
+
+                    if message.mentions:
+                        for m in message.mentions:
+                            text_content = text_content.replace(m.key, "@" + m.name)
+                    original_content["text"] = text_content
+                    new_content = json.dumps(original_content)
+
+                    page_messages.append(new_content)
+                    all_messages.append(new_content)
                 except (json.JSONDecodeError, KeyError) as e:
                     print(f"跳过消息 {message.message_id}，解析错误: {e}")
                     continue
@@ -179,7 +252,7 @@ def show_recent_messages_for_selection(messages):
             content = json.loads(raw_msg)
             text_content = content.get("text", "")
             if text_content:
-                recent_messages.append(text_content)
+                recent_messages.append(content["from_user"] + ":" + text_content)
         except:
             continue
     
