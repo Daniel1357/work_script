@@ -126,7 +126,7 @@ def get_messages(group_id):
                     
                     if message.mentions:
                         mentions = [m.name for m in message.mentions]
-                        print(mentions)
+                        # print(mentions)
                         name_by_user_id.update({
                             m.id: m.name for m in message.mentions
                         })
@@ -135,7 +135,7 @@ def get_messages(group_id):
                     text_content = get_message_content(content) #content.get("text", "")
                     timestamp = datetime.fromtimestamp(int(message.create_time) / 1000)
                     
-                    print(f"📝 {timestamp.strftime('%Y-%m-%d %H:%M')} - {text_content[:50]}{'...' if len(text_content) > 50 else ''}")
+                    # print(f"📝 {timestamp.strftime('%Y-%m-%d %H:%M')} - {text_content[:50]}{'...' if len(text_content) > 50 else ''}")
                     
                     original_content = json.loads(message.body.content)
                     original_content["from_user"] = name
@@ -228,7 +228,7 @@ def get_reply(message,messages):
             continue
         content = chunk.choices[0].delta.content
         if content:
-            print(content, end="")
+            # print(content, end="")
             reply_content += content
     
     print("\n" + "="*60)
